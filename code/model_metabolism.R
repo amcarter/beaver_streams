@@ -45,7 +45,8 @@ dat %>% unitted::v() %>%
 #sM model specs--------------- ####
 bayes_name <- mm_name(type='bayes', pool_K600='normal',
                       err_obs_iid=TRUE, err_proc_iid=TRUE)
-bayes_specs <- specs(bayes_name, burnin_steps = 1000, saved_steps = 1000)
+bayes_specs <- specs(bayes_name, burnin_steps = 1000, saved_steps = 1000,
+                     K600_daily_meanlog_sdlog = 0.05)
 #Run models
 dat <- read_csv('data/prepared/EB100_1_7.7.19.csv')
 fit <- streamMetabolizer::metab(bayes_specs, data = dat)

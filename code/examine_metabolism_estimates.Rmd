@@ -1,0 +1,120 @@
+---
+title: "Untitled"
+output: html_document
+date: "2023-02-09"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+library(tidyverse)
+library(streamMetabolizer)
+met <- read_csv('C:/Users/alice.carter/git/beaver_streams/data/metab_fits/compiled_metabolism.csv')
+met1 <- read_csv('C:/Users/alice.carter/git/beaver_streams/data/metab_fits/compiled_metabolism_K600sigsig_0.1.csv')
+```
+
+## Beaver Stream Metabolism
+
+We estimated stream metabolic fluxes from 3 streams both 100 m upstream and 5 m downstream of beaver dams. Below is a discussion of the estimates.
+
+### Metabolism estimates:
+
+```{r, echo = F}
+
+met %>%
+    mutate(location = factor(location, levels = c('upstream', 'downstream'))) %>%
+    ggplot(aes(date, GPP)) +
+    geom_point(col = 'forestgreen') +
+    geom_line(col = 'forestgreen') +
+    geom_errorbar(aes(ymin = GPP.lower, ymax = GPP.upper), col = 'forestgreen')+
+    geom_point(aes(y = ER), col = 'brown3') +
+    geom_line(aes(y = ER), col = 'brown3') +
+    geom_errorbar(aes(ymin = ER.lower, ymax = ER.upper), col = 'brown3')+
+    facet_grid(site ~ location, scales = 'free_x') +
+    ylab('Metabolism (g O2/m2/d)') +
+    theme_bw()
+
+```
+
+There is a lot of uncertainty in some of the metabolism estimates, particularly from the sites downstream of the dams. This could be arising due to a number of factors. First, the chains of the MCMC sampler in Stream Metabolizer have not converged properly, as indicated by the Rhat values. This is especially a problem at site EB5:
+
+```{r, echo=FALSE}
+
+met %>% select(-msgs.fit, -warnings, -errors,-location, -ends_with(c('upper', 'lower'))) %>%
+    filter(site == 'EB') %>%
+    mutate(site = paste0(site, distance))%>%
+    select(-distance)%>%
+    data.frame()%>%
+    print()
+
+met %>% 
+    mutate(site = paste0(site, distance)) %>%
+    filter(site == 'EB5')%>%
+    pivot_longer(ends_with('Rhat'), names_to = 'parameter', 
+                 values_to = 'Rhat') %>%
+    ggplot(aes(date, Rhat, col = parameter))+
+    geom_point() +
+    geom_line() +
+    ggtitle('Rhats at site EB5')+
+    theme_classic()
+
+```
+
+The DO fits for this site appear to fit well at first glance, but looking at the middle plot, the little hook at the beginning of each day's fit could indicate that the model is forcing this fit by selecting high values that are not supported by the data. 
+
+```{r, echo = FALSE}
+fit <- readRDS('C://Users/alice.carter/git/beaver_streams/data/metab_fits/EBD5_1_7.7.19_og.rds')
+plot_DO_preds(fit)+
+    ggtitle('DO fits at EB5')
+
+```
+Additionally, there is a high degree of covariance between estimates of K600 and ER within a site:
+
+```{r, echo = FALSE}
+met %>%
+    mutate(site = paste0(site, distance)) %>%
+    ggplot(aes(K600, ER, col = site)) +
+    geom_point() +
+    geom_smooth(method = 'lm', se = FALSE) +
+    theme_classic()
+
+```
+
+It is unlikely that K600 would vary this much across only a few days, especially the degree of variation we see in WBX5. One option would be to constrain the model to select K600 values closer to each other, below are these plots reproduced after running the models with a more tightly constrained prior on the standard deviation of K600 between days. This has improved the model fits and reduced the variability in K600, however, K600 and ER are still tightly coupled at WBX5. Second, I am not sure how this is changing the estimates for the two ELK sites so dramatically. In the first model runs, they are the two highest K600 estimates and in the set below they are the two lowest. I would not expect these estimates to change at all because it is only a single day of metabolism at each site, and the large shift doesn't give me a lot of confidence in the estimate. I'm curious about what ELK looks like - is it significantly more or less turbulent than the other two streams, or do you think something strange is going on here (like maybe higher groundwater contributions in this stream)?
+
+### Metabolism estimates with constrained K600 parameter:
+
+
+```{r, echo=FALSE}
+met1 %>%
+    mutate(location = factor(location, levels = c('upstream', 'downstream'))) %>%
+    ggplot(aes(date, GPP)) +
+    geom_point(col = 'forestgreen') +
+    geom_line(col = 'forestgreen') +
+    geom_errorbar(aes(ymin = GPP.lower, ymax = GPP.upper), col = 'forestgreen')+
+    geom_point(aes(y = ER), col = 'brown3') +
+    geom_line(aes(y = ER), col = 'brown3') +
+    geom_errorbar(aes(ymin = ER.lower, ymax = ER.upper), col = 'brown3')+
+    facet_grid(site ~ location, scales = 'free_x') +
+    ylab('Metabolism (g O2/m2/d)') +
+    theme_bw()
+met1 %>% 
+    mutate(site = paste0(site, distance)) %>%
+    filter(site == 'EB5')%>%
+    pivot_longer(ends_with('Rhat'), names_to = 'parameter', 
+                 values_to = 'Rhat') %>%
+    ggplot(aes(date, Rhat, col = parameter))+
+    geom_point() +
+    geom_line() +
+    ggtitle('Rhats at site EB5')+
+    theme_classic()
+
+met1 %>%
+    mutate(site = paste0(site, distance)) %>%
+    ggplot(aes(K600, ER, col = site)) +
+    geom_point() +
+    geom_smooth(method = 'lm', se = FALSE) +
+    theme_classic()
+
+```
+
+I have tried tightening down even further on the K600 prior and the model becomes more difficult to fit. 
