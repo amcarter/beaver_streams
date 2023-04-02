@@ -30,14 +30,17 @@ library(zoo)
 # write_csv(air_pres, 'data/NOAA_air_pressure.csv')
 air_pres <- read_csv('data/NOAA_air_pressure.csv')
 
+
 # Read in data file and format:
 files <- list.files(path = 'data/raw/')
 for(i in 1:length(files)){
 
-    dat <- read_csv(paste0('data/raw/', files[i]))
+    dat <- read_csv(paste0('data/raw/', files[i])) %>% slice(-1)
+    dat$lat <- iconv(dat$lat, 'UTF-8', 'UTF-8', sub = '.')
+    dat$long <- iconv(dat$long, 'UTF-8', 'UTF-8', sub = '.')
 
     # reformat data columns
-    dat <- dat %>% slice(-1)%>%
+    dat <- dat %>%
         select(-DO.sat, -date.time_Q_Z)%>%
         mutate(MST.time = as.POSIXct(MST.time, tz = 'MST',
                                      tryFormats = c('%m/%d/%Y %H:%M:%S',

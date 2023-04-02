@@ -15,6 +15,7 @@ library(lubridate)
 library(tidyverse)
 library(dygraphs)
 
+files <- list.files('data/prepared/')
 # load datasets: ####
 dat <- read_csv('data/prepared/EB100_1_7.7.19.csv')
 
@@ -48,28 +49,33 @@ bayes_name <- mm_name(type='bayes', pool_K600='normal',
 bayes_specs <- specs(bayes_name, burnin_steps = 1000, saved_steps = 1000,
                      K600_daily_meanlog_sdlog = 0.05)
 #Run models
-dat <- read_csv('data/prepared/EB100_1_7.7.19.csv')
-fit <- streamMetabolizer::metab(bayes_specs, data = dat)
-saveRDS(fit, 'data/metab_fits/EB100_1_7.7.19.rds')
+for(i in 1:length(files)){
 
-dat <- read_csv('data/prepared/EBD5_1_7.7.19.csv')
-fit <- streamMetabolizer::metab(bayes_specs, data = dat)
-saveRDS(fit, 'data/metab_fits/EBD5_1_7.7.19.rds')
+    ff <- files[i]
+    dat <- read_csv(paste0('data/prepared/', ff))
+    fit <- streamMetabolizer::metab(bayes_specs, data = dat)
+    saveRDS(fit, paste0('data/metab_fits/',
+                        substr(ff, 1, nchar(ff)-3), 'rds'))
+}
 
-dat <- read_csv('data/prepared/ELKD5_1_7.3.19.csv')
-fit <- streamMetabolizer::metab(bayes_specs, data = dat)
-saveRDS(fit, 'data/metab_fits/ELKD5_1_7.3.19.rds')
-
-dat <- read_csv('data/prepared/ELKU100_1_7.3.19.csv')
-fit <- streamMetabolizer::metab(bayes_specs, data = dat)
-saveRDS(fit, 'data/metab_fits/ELKU100_1_7.3.19.rds')
-
-dat <- read_csv('data/prepared/WBXD5_1_7.9.19.csv')
-fit <- streamMetabolizer::metab(bayes_specs, data = dat)
-saveRDS(fit, 'data/metab_fits/WBXD5_1_7.9.19.rds')
-
-dat <- read_csv('data/prepared/WBXU100_1_7.9.19.csv')
-fit <- streamMetabolizer::metab(bayes_specs, data = dat)
-saveRDS(fit, 'data/metab_fits/WBXU100_1_7.9.19.rds')
-
+# dat <- read_csv('data/prepared/EBD5_1_7.7.19.csv')
+# fit <- streamMetabolizer::metab(bayes_specs, data = dat)
+# saveRDS(fit, 'data/metab_fits/EBD5_1_7.7.19.rds')
+#
+# dat <- read_csv('data/prepared/ELKD5_1_7.3.19.csv')
+# fit <- streamMetabolizer::metab(bayes_specs, data = dat)
+# saveRDS(fit, 'data/metab_fits/ELKD5_1_7.3.19.rds')
+#
+# dat <- read_csv('data/prepared/ELKU100_1_7.3.19.csv')
+# fit <- streamMetabolizer::metab(bayes_specs, data = dat)
+# saveRDS(fit, 'data/metab_fits/ELKU100_1_7.3.19.rds')
+#
+# dat <- read_csv('data/prepared/WBXD5_1_7.9.19.csv')
+# fit <- streamMetabolizer::metab(bayes_specs, data = dat)
+# saveRDS(fit, 'data/metab_fits/WBXD5_1_7.9.19.rds')
+#
+# dat <- read_csv('data/prepared/WBXU100_1_7.9.19.csv')
+# fit <- streamMetabolizer::metab(bayes_specs, data = dat)
+# saveRDS(fit, 'data/metab_fits/WBXU100_1_7.9.19.rds')
+#
 
