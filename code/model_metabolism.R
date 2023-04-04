@@ -17,7 +17,7 @@ library(dygraphs)
 
 files <- list.files('data/prepared/')
 # load datasets: ####
-dat <- read_csv('data/prepared/EB100_1_7.7.19.csv')
+dat <- read_csv('data/prepared/EBU.csv')
 
 # Visualize the data #####
 head(dat) ; tail(dat)

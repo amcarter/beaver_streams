@@ -33,31 +33,43 @@ air_pres <- read_csv('data/NOAA_air_pressure.csv')
 
 # Read in data file and format:
 files <- list.files(path = 'data/raw/')
-for(i in 1:length(files)){
+grepl(pattern = '^([A-Z4]+)[UD]{1}*', files, value = TRUE)
 
-    dat <- read_csv(paste0('data/raw/', files[i])) %>% slice(-1)
-    dat$lat <- iconv(dat$lat, 'UTF-8', 'UTF-8', sub = '.')
-    dat$long <- iconv(dat$long, 'UTF-8', 'UTF-8', sub = '.')
+sites <- c('CRYS', 'EB','ELK', 'LB4', 'WBBV', 'WBX')
+sites <- c(paste0(sites, 'D'), paste0(sites, 'U'))
 
-    # reformat data columns
-    dat <- dat %>%
-        select(-DO.sat, -date.time_Q_Z)%>%
-        mutate(MST.time = as.POSIXct(MST.time, tz = 'MST',
-                                     tryFormats = c('%m/%d/%Y %H:%M:%S',
-                                                    '%m/%d/%Y %H:%M')),
-               DateTime_MST = round_date(MST.time, unit = 'minute'),
-               across(c(DO.obs, depth, temp.water, light, discharge, elev,
-                        dist.d100, obsDO.satprct),
-                          as.numeric)) %>%
-        tidyr::extract(lat, into = c('degs', 'mins'), regex = '([0-9]+). ([0-9]+\\.[0-9]+)') %>%
-        mutate(lat = as.numeric(degs) + as.numeric(mins)/60) %>%
-        tidyr::extract(long, into = c('degs', 'mins'), regex = '([0-9]+). ([0-9]+\\.[0-9]+)') %>%
-        mutate(long = -as.numeric(degs) + as.numeric(mins)/60) %>%
-        select(-MST.time, -degs, -mins)
+for(i in 1:length(sites)){
 
+    filelist <- grep(sites[i], files, value = TRUE)
+
+    sitedat <- data.frame()
+
+    for(f in filelist){
+        dat <- read_csv(paste0('data/raw/', f)) %>% slice(-1)
+        dat$lat <- iconv(dat$lat, 'UTF-8', 'UTF-8', sub = '.')
+        dat$long <- iconv(dat$long, 'UTF-8', 'UTF-8', sub = '.')
+
+        # reformat data columns
+        dat <- dat %>%
+            select(-DO.sat, -date.time_Q_Z)%>%
+            mutate(MST.time = as.POSIXct(MST.time, tz = 'MST',
+                                         tryFormats = c('%m/%d/%Y %H:%M:%S',
+                                                        '%m/%d/%Y %H:%M')),
+                   DateTime_MST = round_date(MST.time, unit = 'minute'),
+                   across(c(DO.obs, depth, temp.water, light, discharge, elev,
+                            dist.d100, obsDO.satprct),
+                              as.numeric)) %>%
+            tidyr::extract(lat, into = c('degs', 'mins'), regex = '([0-9]+). ([0-9]+\\.[0-9]+)') %>%
+            mutate(lat = as.numeric(degs) + as.numeric(mins)/60) %>%
+            tidyr::extract(long, into = c('degs', 'mins'), regex = '([0-9]+). ([0-9]+\\.[0-9]+)') %>%
+            mutate(long = -as.numeric(degs) + as.numeric(mins)/60) %>%
+            select(-MST.time, -degs, -mins)
+
+        sitedat <- bind_rows(sitedat, dat)
+    }
 
     # round times to nearest minute and convert to solar time
-    dat <- dat %>%
+    dat <- sitedat %>%
         mutate(DateTime_UTC = with_tz(DateTime_MST, tz = 'UTC'),
                solar.time = convert_UTC_to_solartime(
                    DateTime_UTC, dat$long[1],
@@ -84,7 +96,7 @@ for(i in 1:length(files)){
 
     # Make the time steps 15 minutes
 
-    write_csv(mod_dat, paste0('data/prepared/', files[i]))
+    write_csv(mod_dat, paste0('data/prepared/', sites[i], '.csv'))
 
 }
 

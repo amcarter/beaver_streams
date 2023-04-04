@@ -7,12 +7,14 @@ library(tidyverse)
 
 # get list of model fits
 files <- list.files('data/metab_fits/K600sigsig_0.1')
+files <- list.files('data/metab_fits/')
 files <- grep('compiled', files, value = TRUE, invert = TRUE)
-compiled_met <- data.frame()
+files <- grep('K600', files, value = TRUE, invert = TRUE)
+comp_met <- data.frame()
 
 for(i in 1:length(files)){
     site <- str_match( files[i], '^([A-Z0-9]+)_.*')[,2]
-    fit <- readRDS(paste0('data/metab_fits/K600sigsig_0.1/', files[i]))
+    fit <- readRDS(paste0('data/metab_fits/', files[i]))
     met <- fit@fit$daily %>%
         select(date, K600 = K600_daily_mean, GPP_Rhat, ER_Rhat,
                K600_Rhat = K600_daily_Rhat) %>%
@@ -25,15 +27,15 @@ for(i in 1:length(files)){
         relocate(c(msgs.fit, warnings, errors), .after = K600_Rhat)
     p <- plot_DO_preds(fit)
     print(p)
-    compiled_met <- bind_rows(compiled_met, met)
+    comp_met <- bind_rows(comp_met, met)
 }
 
-compiled_met <- compiled_met %>%
-    mutate(distance = as.numeric(str_extract(site, '^[A-Z]+([0-9]+)$', 1)),
+compiled_met <- comp_met %>%
+    mutate(distance = as.numeric(str_extract(site, '^[A-Z4]+([0-9]+)$', 1)),
            location = case_when(distance == 100 ~ 'upstream',
                                 distance == 5 ~ 'downstream'),
            location = factor(location, levels = c('upstream', 'downstream')),
-           site = str_extract(site, '^([EBLKWX]+).*', 1))
+           site = str_extract(site, '^([A-Z4]+).*', 1))
 
 write_csv(compiled_met, 'data/metab_fits/compiled_metabolism_K600sigsig_0.05.csv')
 
