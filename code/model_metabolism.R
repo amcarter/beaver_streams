@@ -58,24 +58,108 @@ for(i in 1:length(files)){
                         substr(ff, 1, nchar(ff)-3), 'rds'))
 }
 
-# dat <- read_csv('data/prepared/EBD5_1_7.7.19.csv')
-# fit <- streamMetabolizer::metab(bayes_specs, data = dat)
-# saveRDS(fit, 'data/metab_fits/EBD5_1_7.7.19.rds')
-#
-# dat <- read_csv('data/prepared/ELKD5_1_7.3.19.csv')
-# fit <- streamMetabolizer::metab(bayes_specs, data = dat)
-# saveRDS(fit, 'data/metab_fits/ELKD5_1_7.3.19.rds')
-#
-# dat <- read_csv('data/prepared/ELKU100_1_7.3.19.csv')
-# fit <- streamMetabolizer::metab(bayes_specs, data = dat)
-# saveRDS(fit, 'data/metab_fits/ELKU100_1_7.3.19.rds')
-#
-# dat <- read_csv('data/prepared/WBXD5_1_7.9.19.csv')
-# fit <- streamMetabolizer::metab(bayes_specs, data = dat)
-# saveRDS(fit, 'data/metab_fits/WBXD5_1_7.9.19.rds')
-#
-# dat <- read_csv('data/prepared/WBXU100_1_7.9.19.csv')
-# fit <- streamMetabolizer::metab(bayes_specs, data = dat)
-# saveRDS(fit, 'data/metab_fits/WBXU100_1_7.9.19.rds')
-#
+
+
+
+####
+# Rerun models for ELK sites with tighter parameters on K600 sigma sigma:
+#sM model specs--------------- ####
+bayes_name <- mm_name(type='bayes', pool_K600='normal',
+                      err_obs_iid=TRUE, err_proc_iid=TRUE)
+bayes_specs <- specs(bayes_name, burnin_steps = 1000, saved_steps = 1000,
+                     K600_daily_meanlog_sdlog = 0.01)
+#Run models
+ELK <- files[c(5,6)]
+for(i in 1:length(ELK)){
+
+    ff <- ELK[i]
+    dat <- read_csv(paste0('data/prepared/', ff))
+    fit <- streamMetabolizer::metab(bayes_specs, data = dat)
+    saveRDS(fit, paste0('data/metab_fits/',
+                        substr(ff, 1, nchar(ff)-4), 'K600sigsig_01.rds'))
+}
+
+comp_met <- data.frame()
+
+for(i in 1:length(ELK)){
+    ff <- ELK[i]
+    site <- substr(ff, 1, nchar(ff)-5)
+    location <- str_match( ff, '([UD])\\.csv$')[,2]
+    fit <- readRDS(paste0('data/metab_fits/', substr(ff, 1, nchar(ff)-4),
+                          'K600sigsig_01.rds'))
+    met <- fit@fit$daily %>%
+        select(date, K600 = K600_daily_mean, GPP_Rhat, ER_Rhat,
+               K600_Rhat = K600_daily_Rhat) %>%
+        mutate(site = site,
+               location = location)
+
+    met <- predict_metab(fit) %>%
+        left_join(met, by = 'date') %>%
+        filter(!is.na(GPP)) %>%
+        relocate(site) %>%
+        relocate(c(msgs.fit, warnings, errors), .after = K600_Rhat)
+    p <- plot_DO_preds(fit) + ggtitle(paste(site, location, sep = " "))
+    print(p)
+    comp_met <- bind_rows(comp_met, met)
+}
+
+compiled_met <- comp_met %>%
+    mutate(distance = case_when(location == 'U' ~ -100,
+                                location == 'D' ~ 5),
+           location = case_when(location == 'U' ~ 'upstream',
+                                location == 'D' ~ 'downstream'),
+           location = factor(location, levels = c('upstream', 'downstream')))
+
+write_csv(compiled_met, 'data/metab_fits/compiled_metabolism_K600sigsig_01.csv')
+
+
+# Rerun models for EBU and WBXD sites with looser priors on K600 sigma sigma:
+#sM model specs--------------- ####
+bayes_name <- mm_name(type='bayes', pool_K600='normal',
+                      err_obs_iid=TRUE, err_proc_iid=TRUE)
+bayes_specs <- specs(bayes_name, burnin_steps = 1000, saved_steps = 1000,
+                     K600_daily_meanlog_sdlog = 0.5)
+#Run models
+EB_WBX <- files[c(4,11)]
+for(i in 1:length(EB_WBX)){
+
+    ff <- EB_WBX[i]
+    dat <- read_csv(paste0('data/prepared/', ff))
+    fit <- streamMetabolizer::metab(bayes_specs, data = dat)
+    saveRDS(fit, paste0('data/metab_fits/',
+                        substr(ff, 1, nchar(ff)-4), 'K600sigsig_5.rds'))
+}
+
+comp_met <- data.frame()
+
+for(i in 1:length(EB_WBX)){
+    ff <- EB_WBX[i]
+    site <- substr(ff, 1, nchar(ff)-5)
+    location <- str_match( ff, '([UD])\\.csv$')[,2]
+    fit <- readRDS(paste0('data/metab_fits/', substr(ff, 1, nchar(ff)-4),
+                          'K600sigsig_1.rds'))
+    met <- fit@fit$daily %>%
+        select(date, K600 = K600_daily_mean, GPP_Rhat, ER_Rhat,
+               K600_Rhat = K600_daily_Rhat) %>%
+        mutate(site = site,
+               location = location)
+
+    met <- predict_metab(fit) %>%
+        left_join(met, by = 'date') %>%
+        filter(!is.na(GPP)) %>%
+        relocate(site) %>%
+        relocate(c(msgs.fit, warnings, errors), .after = K600_Rhat)
+    p <- plot_DO_preds(fit) + ggtitle(paste(site, location, sep = " "))
+    print(p)
+    comp_met <- bind_rows(comp_met, met)
+}
+
+compiled_met <- comp_met %>%
+    mutate(distance = case_when(location == 'U' ~ -100,
+                                location == 'D' ~ 5),
+           location = case_when(location == 'U' ~ 'upstream',
+                                location == 'D' ~ 'downstream'),
+           location = factor(location, levels = c('upstream', 'downstream')))
+
+write_csv(compiled_met, 'data/metab_fits/compiled_metabolism_K600sigsig_5.csv')
 

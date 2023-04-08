@@ -33,7 +33,7 @@ air_pres <- read_csv('data/NOAA_air_pressure.csv')
 
 # Read in data file and format:
 files <- list.files(path = 'data/raw/')
-grepl(pattern = '^([A-Z4]+)[UD]{1}*', files, value = TRUE)
+# grepl(pattern = '^([A-Z4]+)[UD]{1}*', files, value = TRUE)
 
 sites <- c('CRYS', 'EB','ELK', 'LB4', 'WBBV', 'WBX')
 sites <- c(paste0(sites, 'D'), paste0(sites, 'U'))
@@ -64,8 +64,14 @@ for(i in 1:length(sites)){
             tidyr::extract(long, into = c('degs', 'mins'), regex = '([0-9]+). ([0-9]+\\.[0-9]+)') %>%
             mutate(long = -as.numeric(degs) + as.numeric(mins)/60) %>%
             select(-MST.time, -degs, -mins)
+        dat$index <- seq(1, nrow(dat))
+        l <- loess(light~index, dat, span = 0.1)
+        dat <- mutate(dat,
+               light = predict(l)/10,
+               light = case_when(light < 0 ~ 0,
+                                 TRUE ~ light))
 
-        sitedat <- bind_rows(sitedat, dat)
+        sitedat <- bind_rows(sitedat, select(dat, -index))
     }
 
     # round times to nearest minute and convert to solar time
@@ -76,9 +82,9 @@ for(i in 1:length(sites)){
                    time.type = c("mean solar")))
 
     # # Generate light
-    dat$light<-calc_light(dat$solar.time,
-                          latitude = dat$lat[i],
-                          longitude = dat$long[i])
+    # dat$light<-calc_light(dat$solar.time,
+    #                       latitude = dat$lat[i],
+    #                       longitude = dat$long[i])
 
     # Add NOAA air pressure data
     dat <- left_join(dat, air_pres, by = 'DateTime_UTC') %>%
@@ -94,7 +100,7 @@ for(i in 1:length(sites)){
                       solar.time, DO.obs, DO.sat,
                       depth, temp.water, light)
 
-    # Make the time steps 15 minutes
+
 
     write_csv(mod_dat, paste0('data/prepared/', sites[i], '.csv'))
 

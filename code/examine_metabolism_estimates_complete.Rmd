@@ -1,0 +1,227 @@
+---
+output: html_document
+date: "2023-02-09"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+library(tidyverse)
+library(streamMetabolizer)
+met <- read_csv('C:/Users/alice.carter/git/beaver_streams/data/metab_fits/compiled_metabolism_K600sigsig_0.05.csv')
+# met1 <- read_csv('C:/Users/alice.carter/git/beaver_streams/data/metab_fits/compiled_metabolism_K600sigsig_0.1.csv')
+```
+
+## Beaver Stream Metabolism
+
+We estimated stream metabolic fluxes from 6 streams both 100 m upstream and 5 m downstream of beaver dams. Below is a discussion of the estimates. At each site, if there were multiple sensor deployments, we grouped these into a single model run in order to improve estimation of K600. We ran the model with normal pooling of K600 because there was minimal variation in discharge within a given site, so it is reasonable to expect K600 to be somewhat constant between days. 
+
+### Metabolism estimates:
+
+```{r, echo = F}
+
+met <- met %>%
+    mutate(location = factor(location, levels = c('upstream', 'downstream'))) 
+
+ggplot(met, aes(date, GPP)) +
+    geom_point(col = 'forestgreen') +
+    geom_line(col = 'forestgreen') +
+    geom_errorbar(aes(ymin = GPP.lower, ymax = GPP.upper), col = 'forestgreen')+
+    geom_point(aes(y = ER), col = 'brown3') +
+    geom_line(aes(y = ER), col = 'brown3') +
+    geom_errorbar(aes(ymin = ER.lower, ymax = ER.upper), col = 'brown3')+
+    facet_grid(site ~ location, scales = 'free_x') +
+    ylab('Metabolism (g O2/m2/d)') +
+    geom_hline(yintercept = 0)+
+    theme_bw()
+
+
+```
+
+Many of these estimates for GPP are very close to Zero or even negative. This could have something to do with the large temperature swings at these sites - I've noticed that many of the sites have peak oxygen concentrations early in the morning when stream temperature is the lowest. This indicates that the physical control on oxygen solubility is a larger control than that of in stream productivity, which would result in a peak in oxygen later in the day, somewhat after peak solar insolation.
+
+Here is an example of one of these sites:
+
+```{r, echo=FALSE}
+dat <- read_csv('C:/Users/alice.carter/git/beaver_streams/data/prepared/WBXD.csv')
+
+labels <- c(oxygen='oxygen\n(mg l^-1)', DO.pctsat = 'oxygen percent\nsaturation',
+            temp.water='water temp\n(deg C)', light='PAR\n(umol m^-2 s^-1)')
+dat %>% unitted::v() %>%
+    select(solar.time, DO.obs, DO.pctsat = DO.sat, temp.water, light) %>%
+    mutate(DO.pctsat = DO.obs/DO.pctsat) %>%
+    gather(type, value, DO.obs, DO.pctsat, temp.water, light) %>%
+    mutate(
+        type=ordered(type, levels=c('DO.obs','DO.pctsat','temp.water','light')),
+        units=ordered(labels[type], unname(labels))) %>%
+    ggplot(aes(x=solar.time, y=value, color=type)) + geom_line() +
+    facet_grid(units ~ ., scale='free_y') + theme_bw() +
+    scale_color_discrete('variable')
+```
+
+This makes sense, especially at the sites just downstream of the beaver dams. I would expect that water that has recently traveled over a spillway would be in close to physical equilibrium with the atmosphere, with little biological signal left to measure. We do see peaks in DO percent saturation not too long after solar noon, which likely means there is some biological signal. It's just not very large, only about 2-4% change in DO percent sat over the course of the whole day. 
+
+This problem applies to about half of the measurements of GPP:
+
+```{r, echo=FALSE}
+
+hist(met$GPP, xlab = 'GPP estimate', main = 'Distribution of GPP estimates')
+
+```
+
+## Model fit assesment
+
+### K600 by ER relationships:
+
+```{r, echo=FALSE}
+
+ggplot(met, aes(K600, ER, col = date)) + 
+    geom_point(size = 1.7) + 
+    geom_smooth(method = 'lm', se = FALSE, col = 'grey') +
+    facet_grid(site~location) +
+    theme_bw()
+
+```
+
+Overall, the pooling of K600 values seems to have worked, there is not much variation in K600 within a site for most of the sites. The exceptions are both the upstream and downstream sites on ELK. The degree of variation estimated in K600 within a single week of measurements at the downstream site is problematically high. This is even with the prior on the K600 variation parameter set to 5%, meaning that we don't expect to see differences in K600 between days greater than 5%, but the model is still predicting a range from ~12-80 d$^{-1}$, which is unreasonable. We can try tightening the prior on $\sigma_{K600}$ to 1% and rerunning.
+
+### Parameter Convergence
+
+```{r, echo=FALSE}
+met %>%
+    pivot_longer(cols = ends_with('_Rhat'), names_to = 'parameter',
+                 values_to = 'Rhat', names_pattern = '(^[A-Za-z0-9]+)_Rhat$') %>%
+    select(site, date, location, parameter, Rhat) %>%
+    ggplot(aes(date, Rhat, col = parameter)) +
+    geom_point() +
+    facet_grid(site~location) +
+    ylim(0.5, 3)+
+    geom_hline(yintercept = 1.1, lty=2)+
+    theme_bw()
+
+```
+
+We can tell if a chain in a bayesian model has converged properly if the value for Rhat is less than 1.1, which is the case for most of the model estimates. Site EB upstream and site WBX downstream show problematic parameter convergence. One option is to try rerunning the models for these two sites with different prior parameter estimates. As correlation between K600 and ER wasn't a problem at these sites, we can try loosening the prior on $\sigma_{K600}$ and rerunning.
+
+
+### Model reruns for ELK sites:
+```{r, echo=FALSE}
+ELK <- read_csv('C:/Users/alice.carter/git/beaver_streams/data/metab_fits/compiled_metabolism_K600sigsig_01.csv') %>%
+    mutate(location = factor(location, levels = c('upstream', 'downstream')),
+           K600_sigsig = 0.01) 
+
+ELK <- met %>% 
+    filter(site == 'ELK') %>%
+    mutate(K600_sigsig = 0.05) %>%
+    bind_rows(ELK)
+
+ELK %>% 
+    mutate(K600_sigsig = factor(K600_sigsig)) %>%
+ggplot( aes(date, GPP, lty = K600_sigsig))+
+    geom_line(col = 'forestgreen')+
+    geom_line(aes(y = ER), col = 'sienna')+
+    facet_wrap(location~., ncol = 1)+
+    theme_bw()
+
+```
+
+The change in prior has not resulted in a change in metabolism estimates.
+
+
+```{r, echo=FALSE}
+ELK %>%
+    mutate(K600_sigsig = factor(K600_sigsig)) %>%
+    ggplot(aes(K600, ER, col = K600_sigsig))+
+    geom_point() + 
+    geom_smooth(method = 'lm', se = FALSE)+
+    facet_wrap(.~location, scales = 'free') +
+    theme_bw()
+
+```
+
+Similarly, we see virtually no change in estimates of K600 and the high correlation between K600 and ER remains. This means that the model is refusing to acknowledge our prior (which constrains values of K600 to ~1% between days). The way you would have to model this site is with a fixed K600 value based on measured gas exchange rates.
+
+
+### Model reruns for EB upstream and WBX downstream sites: 
+
+```{r, echo=FALSE} 
+EB_WBX <- read_csv('C:/Users/alice.carter/git/beaver_streams/data/metab_fits/compiled_metabolism_K600sigsig_1.csv') %>%
+    mutate(location = factor(location, levels = c('upstream', 'downstream')),
+           K600_sigsig = 0.1) 
+
+EB_WBX <- met %>% 
+    filter((site == 'EB' & location == 'upstream')|
+               (site == 'WBX' & location == 'downstream')) %>%
+    mutate(K600_sigsig = 0.05) %>%
+    bind_rows(EB_WBX) %>%
+    mutate(site = paste(site, location, sep = '_'))
+    
+EB_WBX %>%
+    mutate(K600_sigsig = factor(K600_sigsig))%>%
+ggplot(aes(date, GPP, lty = K600_sigsig))+
+    geom_line(col = 'forestgreen')+
+    geom_line(aes(y = ER), col = 'sienna')+
+    facet_wrap(.~site, ncol = 1, scales = 'free_y')+
+    theme_bw()
+
+```
+
+Here, metabolism estimates at EB_upstream have not shifted in response to the new prior but at WBX_downstream, the have increased.
+
+```{r, echo=FALSE}
+EB_WBX %>%
+    pivot_longer(cols = ends_with('_Rhat'), names_to = 'parameter',
+                 values_to = 'Rhat', names_pattern = '(^[A-Za-z0-9]+)_Rhat$') %>%
+    select(site, date, K600_sigsig, parameter, Rhat) %>%
+    mutate(K600_sigsig = factor(K600_sigsig),
+           par = paste0(parameter, K600_sigsig)) %>%
+    ggplot(aes(date, Rhat, col = K600_sigsig, group = c(par))) +
+    geom_point(aes(pch = parameter)) +
+    geom_line()+
+    facet_wrap(site~.) +
+    ylim(0.8, 2.8)+
+    geom_hline(yintercept = 1.1, lty=2)+
+    theme_bw()
+
+```
+
+Slight improvement, but not much change in chain convergence measured by Rhat other than on the final day for the EB_upstream site. We can try one more time, loosening the prior on $\sigma_{K600}$
+
+```{r, echo=FALSE} 
+EB_WBX2 <- read_csv('C:/Users/alice.carter/git/beaver_streams/data/metab_fits/compiled_metabolism_K600sigsig_5.csv') %>%
+    mutate(location = factor(location, levels = c('upstream', 'downstream')),
+           K600_sigsig = 0.5) 
+
+EB_WBX <- 
+    mutate(EB_WBX2, site = paste(site, location, sep = '_')) %>%
+    bind_rows(EB_WBX) 
+
+EB_WBX %>%
+    mutate(K600_sigsig = factor(K600_sigsig))%>%
+ggplot(aes(date, GPP, lty = K600_sigsig))+
+    geom_line(col = 'forestgreen')+
+    geom_line(aes(y = ER), col = 'sienna')+
+    facet_wrap(.~site, ncol = 1, scales = 'free_y')+
+    theme_bw()
+
+
+
+```
+
+There is no further change in the metabolism estimates by running the model with $\sigma_{K600} = 0.5$
+
+### Compile the best fits for each site 
+
+For all sites except EB upstream and WBX downstream, I have kept the estimates from the model with the prior on  $\sigma_{K600} = 0.05$. For those two sites, loosening the prior to 0.1 seemed to improve Rhats and fits a bit, so I have selected those models. 
+
+```{r, echo=FALSE}
+EB_WBX <- read_csv('C:/Users/alice.carter/git/beaver_streams/data/metab_fits/compiled_metabolism_K600sigsig_1.csv')%>%
+    mutate(location = factor(location, levels = c('upstream', 'downstream')))
+    
+met <- met %>% filter(!(site == 'EB' & location == 'upstream')) %>%
+    filter(!(site == 'WBX' & location == 'downstream')) %>%
+    bind_rows(EB_WBX) %>%
+    arrange(site, location, date)
+write_csv(met, 'C:/Users/alice.carter/git/beaver_streams/data/final_metabolism_fits.csv')
+
+```
+

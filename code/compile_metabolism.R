@@ -26,7 +26,7 @@ for(i in 1:length(files)){
         filter(!is.na(GPP)) %>%
         relocate(site) %>%
         relocate(c(msgs.fit, warnings, errors), .after = K600_Rhat)
-    p <- plot_DO_preds(fit)
+    p <- plot_DO_preds(fit) + ggtitle(paste(site, location, sep = " "))
     print(p)
     comp_met <- bind_rows(comp_met, met)
 }
