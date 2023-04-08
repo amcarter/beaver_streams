@@ -6,19 +6,20 @@ library(streamMetabolizer)
 library(tidyverse)
 
 # get list of model fits
-files <- list.files('data/metab_fits/K600sigsig_0.1')
 files <- list.files('data/metab_fits/')
 files <- grep('compiled', files, value = TRUE, invert = TRUE)
 files <- grep('K600', files, value = TRUE, invert = TRUE)
 comp_met <- data.frame()
 
 for(i in 1:length(files)){
-    site <- str_match( files[i], '^([A-Z0-9]+)_.*')[,2]
+    site <- substr(files[i], 1, nchar(files[i])-5)
+    location <- str_match( files[i], '([UD])\\.rds$')[,2]
     fit <- readRDS(paste0('data/metab_fits/', files[i]))
     met <- fit@fit$daily %>%
         select(date, K600 = K600_daily_mean, GPP_Rhat, ER_Rhat,
                K600_Rhat = K600_daily_Rhat) %>%
-        mutate(site = site)
+        mutate(site = site,
+               location = location)
 
     met <- predict_metab(fit) %>%
         left_join(met, by = 'date') %>%
@@ -31,11 +32,11 @@ for(i in 1:length(files)){
 }
 
 compiled_met <- comp_met %>%
-    mutate(distance = as.numeric(str_extract(site, '^[A-Z4]+([0-9]+)$', 1)),
-           location = case_when(distance == 100 ~ 'upstream',
-                                distance == 5 ~ 'downstream'),
-           location = factor(location, levels = c('upstream', 'downstream')),
-           site = str_extract(site, '^([A-Z4]+).*', 1))
+    mutate(distance = case_when(location == 'U' ~ -100,
+                                location == 'D' ~ 5),
+           location = case_when(location == 'U' ~ 'upstream',
+                                location == 'D' ~ 'downstream'),
+           location = factor(location, levels = c('upstream', 'downstream')))
 
 write_csv(compiled_met, 'data/metab_fits/compiled_metabolism_K600sigsig_0.05.csv')
 
@@ -53,6 +54,16 @@ compiled_met %>%
     geom_point() +
     geom_smooth(method = 'lm', se = FALSE) +
     theme_classic()
+
+compiled_met %>%
+    mutate(K600_Rhat = case_when(K600_Rhat > 1.1 ~ 'Rhat > 1.1',
+                                 K600_Rhat <= 1.1 ~ 'Rhat < 1.1'))%>%
+    ggplot(aes(date, K600, col = K600_Rhat, group = location)) +
+    geom_line(col = 'grey') +
+    geom_point() +
+    facet_wrap(site ~ ., scales = 'free_x') +
+    ylab('metabolism (g O2/m2/d)') +
+    theme_bw()
 
 compiled_met %>%
     ggplot(aes(date, GPP)) +
